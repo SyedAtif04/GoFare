@@ -11,10 +11,14 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
+
+// Import new components and services
+import LocationAutocomplete from '../../components/LocationAutocomplete';
+import { apiService, LocationSuggestion } from '../../services/apiService';
+import { locationService } from '../../services/locationService';
 import Animated, {
   FadeIn,
   interpolateColor,
@@ -38,11 +42,26 @@ const cabTypes = [
   { id: 'others', name: 'Others', icon: 'more-horiz', color: '#DDA0DD' },
 ];
 
+// Location interface for autocomplete
+interface LocationData {
+  place_id: string;
+  description: string;
+  main_text: string;
+  secondary_text: string;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
 export default function GoFareScreen() {
   const router = useRouter();
 
-  const [currentLocation, setCurrentLocation] = useState('');
-  const [destination, setDestination] = useState('');
+  // Updated state to handle location objects
+  const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
+  const [currentLocationText, setCurrentLocationText] = useState('');
+  const [destination, setDestination] = useState<LocationData | null>(null);
+  const [destinationText, setDestinationText] = useState('');
   const [selectedCabType, setSelectedCabType] = useState('mini');
 
   // Animation values
@@ -80,28 +99,218 @@ export default function GoFareScreen() {
     };
   });
 
-  const handleUseMyLocation = () => {
-    setCurrentLocation('Current Location');
-    Alert.alert('Location Found', 'Using your current location for pickup!');
+  // Handle current location from GPS
+  const handleUseMyLocation = async () => {
+    try {
+      const locationData = await locationService.getCurrentLocationWithAddress();
+
+      if (locationData) {
+        const locationObj: LocationData = {
+          place_id: locationData.place_id,
+          description: locationData.formatted_address,
+          main_text: locationData.parsed_address?.city || 'Current Location',
+          secondary_text: locationData.formatted_address,
+          coordinates: {
+            latitude: locationData.coordinates.latitude,
+            longitude: locationData.coordinates.longitude
+          }
+        };
+
+        setCurrentLocation(locationObj);
+        setCurrentLocationText(locationObj.description);
+        Alert.alert('Location Found', 'Using your current location for pickup!');
+      }
+    } catch (error) {
+      console.error('Current location error:', error);
+      Alert.alert('Error', 'Could not get your current location. Please try again.');
+    }
   };
 
-  const handleFindRide = () => {
+  // Handle location selection from autocomplete
+  const handleCurrentLocationSelect = async (location: LocationSuggestion) => {
+    console.log('🎯 handleCurrentLocationSelect called for:', location.description);
+    try {
+      // Get place details with coordinates
+      const placeDetails = await apiService.getPlaceDetails(location.place_id);
+
+      const locationData: LocationData = {
+        place_id: location.place_id,
+        description: location.description,
+        main_text: location.main_text,
+        secondary_text: location.secondary_text,
+        coordinates: {
+          latitude: placeDetails.geometry.location.lat,
+          longitude: placeDetails.geometry.location.lng
+        }
+      };
+
+      setCurrentLocation(locationData);
+      // Don't update text here - it's already updated by the autocomplete component
+      console.log('✅ Pickup location selected with coordinates:', locationData);
+    } catch (error) {
+      console.error('Error getting pickup coordinates:', error);
+      // Fallback without coordinates
+      const locationData: LocationData = {
+        place_id: location.place_id,
+        description: location.description,
+        main_text: location.main_text,
+        secondary_text: location.secondary_text
+      };
+      setCurrentLocation(locationData);
+      // Don't update text here - it's already updated by the autocomplete component
+    }
+  };
+
+  const handleDestinationSelect = async (location: LocationSuggestion) => {
+    console.log('🎯 handleDestinationSelect called for:', location.description);
+    try {
+      // Get place details with coordinates
+      const placeDetails = await apiService.getPlaceDetails(location.place_id);
+
+      const locationData: LocationData = {
+        place_id: location.place_id,
+        description: location.description,
+        main_text: location.main_text,
+        secondary_text: location.secondary_text,
+        coordinates: {
+          latitude: placeDetails.geometry.location.lat,
+          longitude: placeDetails.geometry.location.lng
+        }
+      };
+      setDestination(locationData);
+      // Don't update text here - it's already updated by the autocomplete component
+      console.log('✅ Destination location selected:', locationData);
+    } catch (error) {
+      console.error('Error getting destination details:', error);
+      // Fallback: set location without coordinates
+      const locationData: LocationData = {
+        place_id: location.place_id,
+        description: location.description,
+        main_text: location.main_text,
+        secondary_text: location.secondary_text
+      };
+      setDestination(locationData);
+      // Don't update text here - it's already updated by the autocomplete component
+    }
+  };
+
+  const handleFindRide = async () => {
+    console.log('🔍 Validation Check:');
+    console.log('📍 Current Location:', currentLocation);
+    console.log('🏁 Destination:', destination);
+    console.log('📝 Current Location Text:', currentLocationText);
+    console.log('📝 Destination Text:', destinationText);
+
+    // Check if we have text but no location objects - try to resolve them
+    if ((!currentLocation && currentLocationText) || (!destination && destinationText)) {
+      console.log('🔍 Attempting to resolve locations from text input...');
+
+      try {
+        // Resolve current location if missing
+        if (!currentLocation && currentLocationText) {
+          console.log('🔍 Resolving current location from text:', currentLocationText);
+          const suggestions = await apiService.getAutocompleteSuggestions(currentLocationText);
+          if (suggestions.length > 0) {
+            const firstSuggestion = suggestions[0];
+            await handleCurrentLocationSelect(firstSuggestion);
+          }
+        }
+
+        // Resolve destination if missing
+        if (!destination && destinationText) {
+          console.log('🔍 Resolving destination from text:', destinationText);
+          const suggestions = await apiService.getAutocompleteSuggestions(destinationText);
+          if (suggestions.length > 0) {
+            const firstSuggestion = suggestions[0];
+            await handleDestinationSelect(firstSuggestion);
+          }
+        }
+
+        // Wait a moment for state updates
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error('Error resolving locations:', error);
+      }
+    }
+
+    // Re-check after potential resolution
     if (!currentLocation || !destination) {
+      console.log('❌ Validation Failed - Missing location objects');
       Alert.alert('Missing Information', 'Please enter both pickup and destination locations.');
       return;
     }
+
+    console.log('✅ Validation Passed - Both locations available');
+
+    console.log('\n🚀 ===== FETCHING COORDINATES =====');
+    console.log('📍 Pickup Location:', currentLocation.description);
+    console.log('🏁 Destination Location:', destination.description);
+
+    // Get coordinates if not already available
+    let pickupCoords = currentLocation.coordinates;
+    let destinationCoords = destination.coordinates;
+
+    // Fetch pickup coordinates if not available
+    if (!pickupCoords) {
+      console.log('🔍 Fetching pickup coordinates...');
+      try {
+        const pickupDetails = await apiService.getPlaceDetails(currentLocation.place_id);
+        pickupCoords = {
+          latitude: pickupDetails.geometry.location.lat,
+          longitude: pickupDetails.geometry.location.lng
+        };
+        console.log('✅ Pickup coordinates fetched:', pickupCoords);
+      } catch (error) {
+        console.error('❌ Error getting pickup coordinates:', error);
+      }
+    } else {
+      console.log('✅ Pickup coordinates already available:', pickupCoords);
+    }
+
+    // Fetch destination coordinates if not available
+    if (!destinationCoords) {
+      console.log('🔍 Fetching destination coordinates...');
+      try {
+        const destDetails = await apiService.getPlaceDetails(destination.place_id);
+        destinationCoords = {
+          latitude: destDetails.geometry.location.lat,
+          longitude: destDetails.geometry.location.lng
+        };
+        console.log('✅ Destination coordinates fetched:', destinationCoords);
+      } catch (error) {
+        console.error('❌ Error getting destination coordinates:', error);
+      }
+    } else {
+      console.log('✅ Destination coordinates already available:', destinationCoords);
+    }
+
+    // Final coordinate logging
+    console.log('\n🎯 ===== FINAL COORDINATES =====');
+    console.log('🚕 PICKUP COORDINATES:');
+    console.log(`   📍 Latitude: ${pickupCoords?.latitude}`);
+    console.log(`   📍 Longitude: ${pickupCoords?.longitude}`);
+    console.log('🏁 DESTINATION COORDINATES:');
+    console.log(`   📍 Latitude: ${destinationCoords?.latitude}`);
+    console.log(`   📍 Longitude: ${destinationCoords?.longitude}`);
+    console.log('================================\n');
 
     // Button press animation
     buttonScale.value = withSpring(0.95, {}, () => {
       buttonScale.value = withSpring(1);
     });
 
-    // Navigate to ResultsScreen
+    // Navigate to ResultsScreen with location data
     router.push({
       pathname: '/ResultsScreen' as any,
       params: {
-        pickup: currentLocation,
-        destination: destination,
+        pickup: currentLocation.description,
+        pickupPlaceId: currentLocation.place_id,
+        pickupLat: pickupCoords?.latitude?.toString() || '',
+        pickupLng: pickupCoords?.longitude?.toString() || '',
+        destination: destination.description,
+        destinationPlaceId: destination.place_id,
+        destLat: destinationCoords?.latitude?.toString() || '',
+        destLng: destinationCoords?.longitude?.toString() || '',
         selectedCabType: cabTypes.find(cab => cab.id === selectedCabType)?.name,
       },
     });
@@ -184,43 +393,38 @@ export default function GoFareScreen() {
         <View style={styles.content}>
           {/* Input Card */}
           <Animated.View entering={FadeIn.delay(200)} style={styles.inputCard}>
-            {/* Current Location Input */}
-            <Animated.View style={[styles.inputContainer, currentLocationStyle]}>
-              <Ionicons name="location" size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Where are you now?"
-                placeholderTextColor="#9CA3AF"
-                value={currentLocation}
-                onChangeText={setCurrentLocation}
-                onFocus={handleCurrentLocationFocus}
-                onBlur={handleCurrentLocationBlur}
-              />
-              <TouchableOpacity onPress={handleUseMyLocation} style={styles.locationButton}>
-                <Text style={styles.locationButtonText}>Use My Location</Text>
-              </TouchableOpacity>
-            </Animated.View>
+            {/* Current Location Input with Autocomplete */}
+            <LocationAutocomplete
+              placeholder="Where are you now?"
+              value={currentLocationText}
+              onLocationSelect={handleCurrentLocationSelect}
+              onTextChange={setCurrentLocationText}
+              icon="location"
+              style={[currentLocationStyle, { marginBottom: 16 }]}
+              onFocus={handleCurrentLocationFocus}
+              onBlur={handleCurrentLocationBlur}
+              showCurrentLocationButton={true}
+              onCurrentLocationPress={handleUseMyLocation}
+            />
 
-            {/* Destination Input */}
-            <Animated.View style={[styles.inputContainer, destinationStyle]}>
-              <Ionicons name="flag" size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Where to?"
-                placeholderTextColor="#9CA3AF"
-                value={destination}
-                onChangeText={setDestination}
-                onFocus={handleDestinationFocus}
-                onBlur={handleDestinationBlur}
-              />
-            </Animated.View>
+            {/* Destination Input with Autocomplete */}
+            <LocationAutocomplete
+              placeholder="Where to?"
+              value={destinationText}
+              onLocationSelect={handleDestinationSelect}
+              onTextChange={setDestinationText}
+              icon="flag"
+              style={destinationStyle}
+              onFocus={handleDestinationFocus}
+              onBlur={handleDestinationBlur}
+            />
           </Animated.View>
 
           {/* Cab Type Selector */}
           <Animated.View entering={SlideInUp.delay(400)} style={styles.cabSelectorContainer}>
             <Text style={styles.sectionTitle}>Choose Vehicle Type</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cabSelector}>
-              {cabTypes.map((cab, index) => (
+              {cabTypes.map((cab) => (
                 <TouchableOpacity
                   key={cab.id}
                   style={[
@@ -454,6 +658,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 6,
+    zIndex: 1001,
+    position: 'relative',
   },
   inputContainer: {
     flexDirection: 'row',

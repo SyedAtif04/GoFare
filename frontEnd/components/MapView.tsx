@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+// import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { apiService } from '../services/apiService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,13 +35,31 @@ interface MapViewProps {
   destination: string;
   rides: RideOption[];
   onRideSelect: (ride: RideOption) => void;
+  pickupCoords?: { latitude: number; longitude: number };
+  destinationCoords?: { latitude: number; longitude: number };
 }
 
-const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSelect }) => {
+const GoFareMapView: React.FC<MapViewProps> = ({
+  pickup,
+  destination,
+  rides,
+  onRideSelect,
+  pickupCoords,
+  destinationCoords
+}) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
+  const [duration, setDuration] = useState<string>('');
+  const [distance, setDistance] = useState<string>('');
+  const mapRef = useRef<MapView>(null);
 
+  // Fetch route when coordinates are available
   useEffect(() => {
+    if (pickupCoords && destinationCoords) {
+      fetchRoute();
+    }
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -51,7 +72,80 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [pickupCoords, destinationCoords]);
+
+  // Fetch route from backend
+  const fetchRoute = async () => {
+    if (!pickupCoords || !destinationCoords) return;
+
+    try {
+      const origin = `${pickupCoords.latitude},${pickupCoords.longitude}`;
+      const destination = `${destinationCoords.latitude},${destinationCoords.longitude}`;
+
+      const directionsData = await apiService.getDirections(origin, destination);
+
+      if (directionsData.routes && directionsData.routes.length > 0) {
+        const route = directionsData.routes[0];
+        const leg = route.legs[0];
+
+        // Set duration and distance
+        setDuration(leg.duration.text);
+        setDistance(leg.distance.text);
+
+        // Decode polyline for route visualization
+        const coordinates = decodePolyline(route.overview_polyline.points);
+        setRouteCoordinates(coordinates);
+
+        // Fit map to show both markers
+        if (mapRef.current) {
+          mapRef.current.fitToCoordinates([pickupCoords, destinationCoords], {
+            edgePadding: { top: 100, right: 100, bottom: 100, left: 100 },
+            animated: true,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching route:', error);
+    }
+  };
+
+  // Simple polyline decoder (you might want to use a library for production)
+  const decodePolyline = (encoded: string) => {
+    const coordinates: any[] = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < encoded.length) {
+      let b;
+      let shift = 0;
+      let result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      coordinates.push({
+        latitude: lat / 1e5,
+        longitude: lng / 1e5,
+      });
+    }
+
+    return coordinates;
+  };
 
   const getCabIcon = (cabType: string) => {
     switch (cabType.toLowerCase()) {
@@ -105,7 +199,7 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
     return (
       <Animated.View
         style={[
-          styles.cabMarker,
+          styles.cabMarkerContainer,
           position,
           {
             transform: [
@@ -132,6 +226,35 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
     );
   };
 
+  // Default coordinates (Delhi) if no coordinates provided
+  const defaultRegion = {
+    latitude: 28.6139,
+    longitude: 77.2090,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  };
+
+  // Calculate region if both coordinates are available
+  const getMapRegion = () => {
+    if (pickupCoords && destinationCoords) {
+      const minLat = Math.min(pickupCoords.latitude, destinationCoords.latitude);
+      const maxLat = Math.max(pickupCoords.latitude, destinationCoords.latitude);
+      const minLng = Math.min(pickupCoords.longitude, destinationCoords.longitude);
+      const maxLng = Math.max(pickupCoords.longitude, destinationCoords.longitude);
+
+      const latDelta = (maxLat - minLat) * 1.5; // Add padding
+      const lngDelta = (maxLng - minLng) * 1.5;
+
+      return {
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: Math.max(latDelta, 0.01),
+        longitudeDelta: Math.max(lngDelta, 0.01),
+      };
+    }
+    return defaultRegion;
+  };
+
   return (
     <Animated.View
       style={[
@@ -142,30 +265,33 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
         },
       ]}
     >
-      {/* Map Background */}
+      {/* Mock Map View (will be replaced with real maps later) */}
       <LinearGradient
         colors={['#EBF8FF', '#DBEAFE', '#BFDBFE']}
-        style={styles.mapBackground}
+        style={styles.map}
       >
-        {/* Grid Pattern */}
-        <View style={styles.gridPattern}>
-          {Array.from({ length: 20 }).map((_, i) => (
-            <View key={`h-${i}`} style={[styles.gridLine, styles.horizontalLine, { top: i * 30 }]} />
-          ))}
-          {Array.from({ length: 15 }).map((_, i) => (
-            <View key={`v-${i}`} style={[styles.gridLine, styles.verticalLine, { left: i * 30 }]} />
-          ))}
+        {/* Coordinate Display */}
+        <View style={styles.coordinateDisplay}>
+          <Text style={styles.coordinateTitle}>📍 Location Coordinates:</Text>
+          {pickupCoords && (
+            <Text style={styles.coordinateText}>
+              🚕 Pickup: {pickupCoords.latitude.toFixed(4)}, {pickupCoords.longitude.toFixed(4)}
+            </Text>
+          )}
+          {destinationCoords && (
+            <Text style={styles.coordinateText}>
+              🏁 Drop: {destinationCoords.latitude.toFixed(4)}, {destinationCoords.longitude.toFixed(4)}
+            </Text>
+          )}
+          {duration && (
+            <Text style={styles.coordinateText}>⏱️ ETA: {duration}</Text>
+          )}
+          {distance && (
+            <Text style={styles.coordinateText}>📏 Distance: {distance}</Text>
+          )}
         </View>
 
-        {/* Roads */}
-        <View style={styles.roadPattern}>
-          <View style={[styles.road, { top: 100, left: '10%', width: '80%', height: 4 }]} />
-          <View style={[styles.road, { top: 200, left: '20%', width: '60%', height: 4 }]} />
-          <View style={[styles.road, { left: '30%', top: 50, width: 4, height: 200 }]} />
-          <View style={[styles.road, { left: '70%', top: 80, width: 4, height: 150 }]} />
-        </View>
-
-        {/* Pickup Pin */}
+        {/* Mock Pickup Pin */}
         <View style={[styles.locationPin, styles.pickupPin, { top: 120, left: '20%' }]}>
           <Ionicons name="location" size={24} color="#10B981" />
           <View style={styles.pinLabel}>
@@ -173,7 +299,7 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
           </View>
         </View>
 
-        {/* Destination Pin */}
+        {/* Mock Destination Pin */}
         <View style={[styles.locationPin, styles.destinationPin, { top: 180, left: '75%' }]}>
           <Ionicons name="flag" size={24} color="#EF4444" />
           <View style={styles.pinLabel}>
@@ -181,10 +307,10 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
           </View>
         </View>
 
-        {/* Route Line */}
+        {/* Mock Route Line */}
         <View style={styles.routeLine} />
 
-        {/* Cab Markers */}
+        {/* Mock Cab Markers */}
         {rides.map((ride, index) => (
           <CabMarker
             key={ride.id}
@@ -196,6 +322,20 @@ const MapView: React.FC<MapViewProps> = ({ pickup, destination, rides, onRideSel
           />
         ))}
       </LinearGradient>
+
+      {/* ETA Info Card */}
+      {(duration || distance) && (
+        <View style={styles.etaCard}>
+          <View style={styles.etaInfo}>
+            <Ionicons name="time" size={16} color="#3B82F6" />
+            <Text style={styles.etaText}>{duration}</Text>
+          </View>
+          <View style={styles.etaInfo}>
+            <Ionicons name="car" size={16} color="#3B82F6" />
+            <Text style={styles.etaText}>{distance}</Text>
+          </View>
+        </View>
+      )}
 
       {/* Location Info Card */}
       <View style={styles.locationCard}>
@@ -256,12 +396,116 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  mapBackground: {
+  map: {
     flex: 1,
     margin: 20,
     borderRadius: 20,
     overflow: 'hidden',
-    position: 'relative',
+  },
+  // Custom marker styles
+  customMarker: {
+    alignItems: 'center',
+  },
+  markerCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  markerLabel: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  markerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  // Cab marker styles
+  cabMarker: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  cabFare: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  // ETA card styles
+  etaCard: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  etaInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  etaText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  // Coordinate display styles
+  coordinateDisplay: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  coordinateTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  coordinateText: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 4,
+    fontFamily: 'monospace',
   },
   gridPattern: {
     position: 'absolute',
@@ -333,7 +577,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     borderRadius: 1,
   },
-  cabMarker: {
+  cabMarkerContainer: {
     position: 'absolute',
     zIndex: 5,
   },
@@ -474,4 +718,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MapView;
+export default GoFareMapView;

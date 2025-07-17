@@ -4,26 +4,16 @@ const Joi = require('joi');
  * Validation schema for geocoding requests
  */
 const geocodingSchema = Joi.object({
-  address: Joi.string().min(1).max(500).when('place_id', {
-    is: Joi.exist(),
-    then: Joi.optional(),
-    otherwise: Joi.required()
-  })
+  address: Joi.string().min(1).max(500).optional()
     .messages({
       'string.empty': 'Address cannot be empty',
       'string.min': 'Address must be at least 1 character',
-      'string.max': 'Address cannot exceed 500 characters',
-      'any.required': 'Either address or place_id is required'
+      'string.max': 'Address cannot exceed 500 characters'
     }),
-  
-  place_id: Joi.string().when('address', {
-    is: Joi.exist(),
-    then: Joi.optional(),
-    otherwise: Joi.required()
-  })
+
+  place_id: Joi.string().optional()
     .messages({
-      'string.empty': 'Place ID cannot be empty',
-      'any.required': 'Either address or place_id is required'
+      'string.empty': 'Place ID cannot be empty'
     }),
   
   components: Joi.string().optional()
@@ -61,6 +51,20 @@ const validateGeocodingRequest = (req, res, next) => {
         field: detail.path.join('.'),
         message: detail.message
       })),
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Custom validation: ensure either address or place_id is provided
+  const { address, place_id } = req.body;
+  if (!address && !place_id) {
+    return res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      details: [{
+        field: 'address_or_place_id',
+        message: 'Either address or place_id is required'
+      }],
       timestamp: new Date().toISOString()
     });
   }

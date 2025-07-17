@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -37,9 +37,37 @@ interface RideOption {
 }
 
 const ResultsScreen: React.FC = () => {
-  const router = useRouter();
   const params = useLocalSearchParams();
-  const { pickup, destination, selectedCabType } = params;
+  const {
+    pickup,
+    destination,
+    selectedCabType,
+    pickupPlaceId,
+    pickupLat,
+    pickupLng,
+    destinationPlaceId,
+    destLat,
+    destLng
+  } = params;
+
+  // Parse coordinates
+  const pickupCoords = pickupLat && pickupLng ? {
+    latitude: parseFloat(pickupLat as string),
+    longitude: parseFloat(pickupLng as string)
+  } : undefined;
+
+  const destinationCoords = destLat && destLng ? {
+    latitude: parseFloat(destLat as string),
+    longitude: parseFloat(destLng as string)
+  } : undefined;
+
+  // Log coordinates when component mounts
+  useEffect(() => {
+    console.log('🚕 ResultsScreen - PICKUP COORDINATES:', pickupCoords);
+    console.log('🏁 ResultsScreen - DESTINATION COORDINATES:', destinationCoords);
+    console.log('📍 Pickup Place ID:', pickupPlaceId);
+    console.log('📍 Destination Place ID:', destinationPlaceId);
+  }, []);
   
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('list');
@@ -326,6 +354,8 @@ const ResultsScreen: React.FC = () => {
             destination={destination as string}
             rides={getSortedRides()}
             onRideSelect={handleBookRide}
+            pickupCoords={pickupCoords}
+            destinationCoords={destinationCoords}
           />
         ) : (
           <ScrollView
