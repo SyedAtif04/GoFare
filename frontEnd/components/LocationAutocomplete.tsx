@@ -3,6 +3,7 @@ import {
   View,
   TextInput,
   TouchableOpacity,
+  Pressable,
   Text,
   FlatList,
   ScrollView,
@@ -43,6 +44,7 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
 
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const isProcessingSelection = useRef(false);
@@ -101,36 +103,61 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     }, 300); // 300ms delay
   };
 
-  // Handle suggestion selection
+  // Handle suggestion selection with multiple fallback mechanisms
   const handleSuggestionPress = (suggestion: LocationSuggestion) => {
+    console.log('🎯 Suggestion pressed:', suggestion.description);
+
+    // Prevent multiple rapid selections
     if (isProcessingSelection.current) {
       console.log('⏳ Already processing selection, ignoring...');
       return;
     }
 
     isProcessingSelection.current = true;
-    console.log('🎯 Suggestion pressed:', suggestion.description);
+    setIsSelecting(true);
 
-    // Immediately hide suggestions to prevent multiple selections
-    setShowSuggestions(false);
-    suggestionHeight.value = withTiming(0, { duration: 200 });
-    setSuggestions([]);
+    try {
+      // Step 1: Hide suggestions immediately
+      setShowSuggestions(false);
+      suggestionHeight.value = withTiming(0, { duration: 150 });
+      setSuggestions([]);
 
-    // Update text immediately and synchronously
-    onTextChange(suggestion.description);
+      // Step 2: Update text state with multiple attempts
+      console.log('📝 Setting text to:', suggestion.description);
 
-    // Call location selection handler immediately
-    onLocationSelect(suggestion);
+      // Primary text update
+      onTextChange(suggestion.description);
 
-    // Dismiss keyboard
-    Keyboard.dismiss();
+      // Fallback text update after a tiny delay
+      setTimeout(() => {
+        onTextChange(suggestion.description);
+        console.log('🔄 Fallback text update executed');
+      }, 10);
 
-    // Reset processing flag after a delay
-    setTimeout(() => {
-      isProcessingSelection.current = false;
-    }, 500);
+      // Step 3: Call the location selection handler
+      console.log('📍 Calling location handler...');
+      onLocationSelect(suggestion);
 
-    console.log('✅ Suggestion selection completed');
+      // Step 4: Dismiss keyboard
+      Keyboard.dismiss();
+
+      console.log('✅ Selection process completed successfully');
+    } catch (error) {
+      console.error('❌ Error in suggestion selection:', error);
+      // Emergency fallback - try again
+      setTimeout(() => {
+        onTextChange(suggestion.description);
+        onLocationSelect(suggestion);
+        console.log('🚨 Emergency fallback executed');
+      }, 50);
+    } finally {
+      // Reset processing flag
+      setTimeout(() => {
+        isProcessingSelection.current = false;
+        setIsSelecting(false);
+        console.log('🔄 Processing flag reset');
+      }, 300);
+    }
   };
 
   // Handle focus
@@ -186,8 +213,13 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
         />
         
         {/* Loading indicator */}
-        {isLoading && (
+        {(isLoading || isSelecting) && (
           <ActivityIndicator size="small" color="#3B82F6" style={styles.loadingIndicator} />
+        )}
+
+        {/* Selection status indicator */}
+        {isSelecting && (
+          <Text style={styles.selectingText}>Selecting...</Text>
         )}
         
         {/* Current location button */}
@@ -208,15 +240,21 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
             nestedScrollEnabled={true}
           >
             {suggestions.map((item) => (
-              <TouchableOpacity
+              <Pressable
                 key={item.place_id}
-                style={styles.suggestionItem}
+                style={({ pressed }) => [
+                  styles.suggestionItem,
+                  pressed && { backgroundColor: '#F3F4F6' }
+                ]}
                 onPress={() => {
-                  console.log('🎯 Suggestion selected:', item.main_text);
+                  console.log('🔥 Pressable onPress triggered for:', item.main_text);
                   handleSuggestionPress(item);
                 }}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPressIn={() => {
+                  console.log('🔥 Pressable onPressIn triggered for:', item.main_text);
+                }}
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                android_ripple={{ color: '#E5E7EB' }}
               >
                 <Ionicons name="location-outline" size={16} color="#6B7280" style={styles.suggestionIcon} />
                 <View style={styles.suggestionText} pointerEvents="none">
@@ -227,7 +265,7 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
                     {item.secondary_text}
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </ScrollView>
         )}
@@ -267,6 +305,12 @@ const styles = StyleSheet.create({
   },
   loadingIndicator: {
     marginLeft: 8,
+  },
+  selectingText: {
+    fontSize: 12,
+    color: '#3B82F6',
+    marginLeft: 8,
+    fontWeight: '500',
   },
   locationButton: {
     backgroundColor: '#3B82F6',
