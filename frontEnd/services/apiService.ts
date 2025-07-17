@@ -164,8 +164,19 @@ class ApiService {
     }
   }
 
-  // Get directions between two points
-  async getDirections(origin: string, destination: string, mode: string = 'driving'): Promise<DirectionsResponse> {
+  // Get directions between two points with traffic and alternate routes
+  async getDirections(
+    origin: string,
+    destination: string,
+    options: {
+      mode?: string;
+      alternatives?: boolean;
+      traffic_model?: string;
+      departure_time?: string;
+    } = {}
+  ): Promise<DirectionsResponse> {
+    const { mode = 'driving', alternatives = true, traffic_model = 'best_guess', departure_time = 'now' } = options;
+
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/maps/directions`, {
         method: 'POST',
@@ -175,7 +186,10 @@ class ApiService {
         body: JSON.stringify({
           origin,
           destination,
-          mode
+          mode,
+          alternatives,
+          traffic_model,
+          departure_time
         })
       });
       

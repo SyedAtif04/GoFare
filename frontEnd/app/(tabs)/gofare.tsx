@@ -128,7 +128,7 @@ export default function GoFareScreen() {
 
   // Handle location selection from autocomplete
   const handleCurrentLocationSelect = async (location: LocationSuggestion) => {
-    console.log('🎯 handleCurrentLocationSelect called for:', location.description);
+    console.log(' handleCurrentLocationSelect called for:', location.description);
     try {
       // Get place details with coordinates
       const placeDetails = await apiService.getPlaceDetails(location.place_id);
@@ -146,7 +146,7 @@ export default function GoFareScreen() {
 
       setCurrentLocation(locationData);
       // Don't update text here - it's already updated by the autocomplete component
-      console.log('✅ Pickup location selected with coordinates:', locationData);
+      console.log(' Pickup location selected with coordinates:', locationData);
     } catch (error) {
       console.error('Error getting pickup coordinates:', error);
       // Fallback without coordinates
@@ -162,7 +162,7 @@ export default function GoFareScreen() {
   };
 
   const handleDestinationSelect = async (location: LocationSuggestion) => {
-    console.log('🎯 handleDestinationSelect called for:', location.description);
+    console.log(' handleDestinationSelect called for:', location.description);
     try {
       // Get place details with coordinates
       const placeDetails = await apiService.getPlaceDetails(location.place_id);
@@ -179,7 +179,7 @@ export default function GoFareScreen() {
       };
       setDestination(locationData);
       // Don't update text here - it's already updated by the autocomplete component
-      console.log('✅ Destination location selected:', locationData);
+      console.log(' Destination location selected:', locationData);
     } catch (error) {
       console.error('Error getting destination details:', error);
       // Fallback: set location without coordinates
@@ -195,20 +195,20 @@ export default function GoFareScreen() {
   };
 
   const handleFindRide = async () => {
-    console.log('🔍 Validation Check:');
-    console.log('📍 Current Location:', currentLocation);
-    console.log('🏁 Destination:', destination);
-    console.log('📝 Current Location Text:', currentLocationText);
-    console.log('📝 Destination Text:', destinationText);
+    console.log(' Validation Check:');
+    console.log(' Current Location:', currentLocation);
+    console.log(' Destination:', destination);
+    console.log(' Current Location Text:', currentLocationText);
+    console.log(' Destination Text:', destinationText);
 
     // Check if we have text but no location objects - try to resolve them
     if ((!currentLocation && currentLocationText) || (!destination && destinationText)) {
-      console.log('🔍 Attempting to resolve locations from text input...');
+      console.log(' Attempting to resolve locations from text input...');
 
       try {
         // Resolve current location if missing
         if (!currentLocation && currentLocationText) {
-          console.log('🔍 Resolving current location from text:', currentLocationText);
+          console.log(' Resolving current location from text:', currentLocationText);
           const suggestions = await apiService.getAutocompleteSuggestions(currentLocationText);
           if (suggestions.length > 0) {
             const firstSuggestion = suggestions[0];
@@ -218,7 +218,7 @@ export default function GoFareScreen() {
 
         // Resolve destination if missing
         if (!destination && destinationText) {
-          console.log('🔍 Resolving destination from text:', destinationText);
+          console.log(' Resolving destination from text:', destinationText);
           const suggestions = await apiService.getAutocompleteSuggestions(destinationText);
           if (suggestions.length > 0) {
             const firstSuggestion = suggestions[0];
@@ -240,11 +240,11 @@ export default function GoFareScreen() {
       return;
     }
 
-    console.log('✅ Validation Passed - Both locations available');
+    console.log(' Validation Passed - Both locations available');
 
-    console.log('\n🚀 ===== FETCHING COORDINATES =====');
-    console.log('📍 Pickup Location:', currentLocation.description);
-    console.log('🏁 Destination Location:', destination.description);
+    console.log('\n ===== FETCHING COORDINATES =====');
+    console.log(' Pickup Location:', currentLocation.description);
+    console.log(' Destination Location:', destination.description);
 
     // Get coordinates if not already available
     let pickupCoords = currentLocation.coordinates;
@@ -252,46 +252,46 @@ export default function GoFareScreen() {
 
     // Fetch pickup coordinates if not available
     if (!pickupCoords) {
-      console.log('🔍 Fetching pickup coordinates...');
+      console.log(' Fetching pickup coordinates...');
       try {
         const pickupDetails = await apiService.getPlaceDetails(currentLocation.place_id);
         pickupCoords = {
           latitude: pickupDetails.geometry.location.lat,
           longitude: pickupDetails.geometry.location.lng
         };
-        console.log('✅ Pickup coordinates fetched:', pickupCoords);
+        console.log(' Pickup coordinates fetched:', pickupCoords);
       } catch (error) {
-        console.error('❌ Error getting pickup coordinates:', error);
+        console.error(' Error getting pickup coordinates:', error);
       }
     } else {
-      console.log('✅ Pickup coordinates already available:', pickupCoords);
+      console.log(' Pickup coordinates already available:', pickupCoords);
     }
 
     // Fetch destination coordinates if not available
     if (!destinationCoords) {
-      console.log('🔍 Fetching destination coordinates...');
+      console.log(' Fetching destination coordinates...');
       try {
         const destDetails = await apiService.getPlaceDetails(destination.place_id);
         destinationCoords = {
           latitude: destDetails.geometry.location.lat,
           longitude: destDetails.geometry.location.lng
         };
-        console.log('✅ Destination coordinates fetched:', destinationCoords);
+        console.log(' Destination coordinates fetched:', destinationCoords);
       } catch (error) {
-        console.error('❌ Error getting destination coordinates:', error);
+        console.error(' Error getting destination coordinates:', error);
       }
     } else {
-      console.log('✅ Destination coordinates already available:', destinationCoords);
+      console.log(' Destination coordinates already available:', destinationCoords);
     }
 
     // Final coordinate logging
-    console.log('\n🎯 ===== FINAL COORDINATES =====');
-    console.log('🚕 PICKUP COORDINATES:');
-    console.log(`   📍 Latitude: ${pickupCoords?.latitude}`);
-    console.log(`   📍 Longitude: ${pickupCoords?.longitude}`);
-    console.log('🏁 DESTINATION COORDINATES:');
-    console.log(`   📍 Latitude: ${destinationCoords?.latitude}`);
-    console.log(`   📍 Longitude: ${destinationCoords?.longitude}`);
+    console.log('\n ===== FINAL COORDINATES =====');
+    console.log(' PICKUP COORDINATES:');
+    console.log(`    Latitude: ${pickupCoords?.latitude}`);
+    console.log(`    Longitude: ${pickupCoords?.longitude}`);
+    console.log(' DESTINATION COORDINATES:');
+    console.log(`    Latitude: ${destinationCoords?.latitude}`);
+    console.log(`    Longitude: ${destinationCoords?.longitude}`);
     console.log('================================\n');
 
     // Button press animation

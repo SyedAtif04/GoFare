@@ -105,11 +105,11 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
 
   // Handle suggestion selection with multiple fallback mechanisms
   const handleSuggestionPress = (suggestion: LocationSuggestion) => {
-    console.log('🎯 Suggestion pressed:', suggestion.description);
+    console.log(' Suggestion pressed:', suggestion.description);
 
     // Prevent multiple rapid selections
     if (isProcessingSelection.current) {
-      console.log('⏳ Already processing selection, ignoring...');
+      console.log(' Already processing selection, ignoring...');
       return;
     }
 
@@ -123,7 +123,7 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       setSuggestions([]);
 
       // Step 2: Update text state with multiple attempts
-      console.log('📝 Setting text to:', suggestion.description);
+      console.log(' Setting text to:', suggestion.description);
 
       // Primary text update
       onTextChange(suggestion.description);
@@ -131,31 +131,31 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
       // Fallback text update after a tiny delay
       setTimeout(() => {
         onTextChange(suggestion.description);
-        console.log('🔄 Fallback text update executed');
+        console.log(' Fallback text update executed');
       }, 10);
 
       // Step 3: Call the location selection handler
-      console.log('📍 Calling location handler...');
+      console.log(' Calling location handler...');
       onLocationSelect(suggestion);
 
       // Step 4: Dismiss keyboard
       Keyboard.dismiss();
 
-      console.log('✅ Selection process completed successfully');
+      console.log(' Selection process completed successfully');
     } catch (error) {
-      console.error('❌ Error in suggestion selection:', error);
+      console.error(' Error in suggestion selection:', error);
       // Emergency fallback - try again
       setTimeout(() => {
         onTextChange(suggestion.description);
         onLocationSelect(suggestion);
-        console.log('🚨 Emergency fallback executed');
+        console.log(' Emergency fallback executed');
       }, 50);
     } finally {
       // Reset processing flag
       setTimeout(() => {
         isProcessingSelection.current = false;
         setIsSelecting(false);
-        console.log('🔄 Processing flag reset');
+        console.log(' Processing flag reset');
       }, 300);
     }
   };
@@ -247,11 +247,11 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
                   pressed && { backgroundColor: '#F3F4F6' }
                 ]}
                 onPress={() => {
-                  console.log('🔥 Pressable onPress triggered for:', item.main_text);
+                  console.log(' Pressable onPress triggered for:', item.main_text);
                   handleSuggestionPress(item);
                 }}
                 onPressIn={() => {
-                  console.log('🔥 Pressable onPressIn triggered for:', item.main_text);
+                  console.log(' Pressable onPressIn triggered for:', item.main_text);
                 }}
                 hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                 android_ripple={{ color: '#E5E7EB' }}

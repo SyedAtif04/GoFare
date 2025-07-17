@@ -106,13 +106,13 @@ app.use(errorHandler);
 
 // Start server on all interfaces (0.0.0.0) to accept mobile connections
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 GoFare Backend API running on port ${PORT}`);
-  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🗺️  Google Maps API: ${process.env.GOOGLE_MAPS_API_KEY ? 'Configured' : 'Missing'}`);
-  console.log(`🌐 Local access: http://localhost:${PORT}/health`);
-  console.log(`� Computer access: http://10.50.179.45:${PORT}/health`);
-  console.log(`�📱 Mobile access: http://10.50.179.240:${PORT}/health`);
-  console.log(`🔗 API endpoint: http://10.50.179.45:${PORT}/api/v1/maps/autocomplete`);
+  console.log(` GoFare Backend API running on port ${PORT}`);
+  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(` Google Maps API: ${process.env.GOOGLE_MAPS_API_KEY ? 'Configured' : 'Missing'}`);
+  console.log(` Local access: http://localhost:${PORT}/health`);
+  console.log(` Computer access: http://10.50.179.45:${PORT}/health`);
+  console.log(` Mobile access: http://10.50.179.240:${PORT}/health`);
+  console.log(` API endpoint: http://10.50.179.45:${PORT}/api/v1/maps/autocomplete`);
 });
 
 module.exports = app;

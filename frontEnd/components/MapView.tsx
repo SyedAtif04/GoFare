@@ -8,9 +8,9 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-// import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { apiService } from '../services/apiService';
 
 const { width, height } = Dimensions.get('window');
@@ -52,6 +52,8 @@ const GoFareMapView: React.FC<MapViewProps> = ({
   const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
   const [duration, setDuration] = useState<string>('');
   const [distance, setDistance] = useState<string>('');
+  const [showTraffic, setShowTraffic] = useState(true);
+  const [alternateRoutes, setAlternateRoutes] = useState<any[]>([]);
   const mapRef = useRef<MapView>(null);
 
   // Fetch route when coordinates are available
@@ -74,7 +76,7 @@ const GoFareMapView: React.FC<MapViewProps> = ({
     ]).start();
   }, [pickupCoords, destinationCoords]);
 
-  // Fetch route from backend
+  // Fetch route from backend with traffic and alternate routes
   const fetchRoute = async () => {
     if (!pickupCoords || !destinationCoords) return;
 
@@ -82,19 +84,37 @@ const GoFareMapView: React.FC<MapViewProps> = ({
       const origin = `${pickupCoords.latitude},${pickupCoords.longitude}`;
       const destination = `${destinationCoords.latitude},${destinationCoords.longitude}`;
 
-      const directionsData = await apiService.getDirections(origin, destination);
+      // Request directions with traffic and alternate routes
+      const directionsData = await apiService.getDirections(origin, destination, {
+        mode: 'driving',
+        alternatives: true,
+        traffic_model: 'best_guess',
+        departure_time: 'now'
+      });
 
       if (directionsData.routes && directionsData.routes.length > 0) {
-        const route = directionsData.routes[0];
-        const leg = route.legs[0];
+        const mainRoute = directionsData.routes[0];
+        const leg = mainRoute.legs[0];
 
-        // Set duration and distance
-        setDuration(leg.duration.text);
+        // Set duration and distance (with traffic if available)
+        const durationInTraffic = (leg as any).duration_in_traffic || leg.duration;
+        setDuration(durationInTraffic.text);
         setDistance(leg.distance.text);
 
-        // Decode polyline for route visualization
-        const coordinates = decodePolyline(route.overview_polyline.points);
+        // Decode polyline for main route visualization
+        const coordinates = decodePolyline(mainRoute.overview_polyline.points);
         setRouteCoordinates(coordinates);
+
+        // Store alternate routes
+        if (directionsData.routes.length > 1) {
+          const alternates = directionsData.routes.slice(1).map(route => ({
+            coordinates: decodePolyline(route.overview_polyline.points),
+            duration: route.legs[0].duration.text,
+            distance: route.legs[0].distance.text,
+            summary: route.summary
+          }));
+          setAlternateRoutes(alternates);
+        }
 
         // Fit map to show both markers
         if (mapRef.current) {
@@ -106,6 +126,10 @@ const GoFareMapView: React.FC<MapViewProps> = ({
       }
     } catch (error) {
       console.error('Error fetching route:', error);
+      // Fallback: create a simple straight line
+      setRouteCoordinates([pickupCoords, destinationCoords]);
+      setDuration('~15 mins');
+      setDistance('~5 km');
     }
   };
 
@@ -164,67 +188,7 @@ const GoFareMapView: React.FC<MapViewProps> = ({
     }
   };
 
-  const CabMarker = ({ ride, position }: { ride: RideOption; position: { top: number; left: number } }) => {
-    const markerScale = useRef(new Animated.Value(0)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
 
-    useEffect(() => {
-      // Initial scale animation
-      Animated.spring(markerScale, {
-        toValue: 1,
-        delay: Math.random() * 1000,
-        useNativeDriver: true,
-      }).start();
-
-      // Pulse animation
-      const pulseAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnimation.start();
-
-      return () => pulseAnimation.stop();
-    }, []);
-
-    return (
-      <Animated.View
-        style={[
-          styles.cabMarkerContainer,
-          position,
-          {
-            transform: [
-              { scale: markerScale },
-              { scale: pulseAnim },
-            ],
-          },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={() => onRideSelect(ride)}
-          style={[styles.cabMarkerButton, { backgroundColor: ride.color + '20' }]}
-        >
-          <MaterialIcons 
-            name={getCabIcon(ride.cabType) as any} 
-            size={20} 
-            color={ride.color} 
-          />
-          <View style={[styles.cabMarkerBadge, { backgroundColor: ride.color }]}>
-            <Text style={styles.cabMarkerText}>₹{ride.fare}</Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
 
   // Default coordinates (Delhi) if no coordinates provided
   const defaultRegion = {
@@ -234,7 +198,7 @@ const GoFareMapView: React.FC<MapViewProps> = ({
     longitudeDelta: 0.0421,
   };
 
-  // Calculate region if both coordinates are available
+  // Helper function to get map region based on pickup/destination
   const getMapRegion = () => {
     if (pickupCoords && destinationCoords) {
       const minLat = Math.min(pickupCoords.latitude, destinationCoords.latitude);
@@ -252,8 +216,55 @@ const GoFareMapView: React.FC<MapViewProps> = ({
         longitudeDelta: Math.max(lngDelta, 0.01),
       };
     }
+
+    if (pickupCoords) {
+      return {
+        latitude: pickupCoords.latitude,
+        longitude: pickupCoords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
+    }
+
     return defaultRegion;
   };
+
+  // Helper function to generate cab positions around the route
+  const generateCabPosition = (index: number, pickup?: { latitude: number; longitude: number }, destination?: { latitude: number; longitude: number }) => {
+    if (pickup && destination) {
+      const latDiff = destination.latitude - pickup.latitude;
+      const lngDiff = destination.longitude - pickup.longitude;
+
+      // Distribute cabs along the route with some random offset
+      const progress = (index + 1) / 6; // 6 total positions
+      const randomOffset = (Math.random() - 0.5) * 0.002; // Small random offset
+
+      return {
+        latitude: pickup.latitude + (latDiff * progress) + randomOffset,
+        longitude: pickup.longitude + (lngDiff * progress) + randomOffset,
+      };
+    }
+
+    // Fallback to default region with offset
+    return {
+      latitude: defaultRegion.latitude + (index * 0.001),
+      longitude: defaultRegion.longitude + (index * 0.001),
+    };
+  };
+
+  // Custom map style for a clean look
+  const mapStyle = [
+    {
+      featureType: 'poi',
+      elementType: 'labels',
+      stylers: [{ visibility: 'off' }],
+    },
+    {
+      featureType: 'transit',
+      elementType: 'labels',
+      stylers: [{ visibility: 'off' }],
+    },
+  ];
 
   return (
     <Animated.View
@@ -265,126 +276,185 @@ const GoFareMapView: React.FC<MapViewProps> = ({
         },
       ]}
     >
-      {/* Mock Map View (will be replaced with real maps later) */}
-      <LinearGradient
-        colors={['#EBF8FF', '#DBEAFE', '#BFDBFE']}
+      {/* Real Google Maps */}
+      <MapView
+        ref={mapRef}
         style={styles.map}
+        provider={Platform.OS === 'ios' ? undefined : PROVIDER_GOOGLE}
+        initialRegion={getMapRegion()}
+        showsUserLocation={true}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        showsScale={false}
+        showsBuildings={true}
+        showsTraffic={showTraffic}
+        mapType="standard"
+        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
       >
-        {/* Coordinate Display */}
-        <View style={styles.coordinateDisplay}>
-          <Text style={styles.coordinateTitle}>📍 Location Coordinates:</Text>
-          {pickupCoords && (
-            <Text style={styles.coordinateText}>
-              🚕 Pickup: {pickupCoords.latitude.toFixed(4)}, {pickupCoords.longitude.toFixed(4)}
-            </Text>
-          )}
-          {destinationCoords && (
-            <Text style={styles.coordinateText}>
-              🏁 Drop: {destinationCoords.latitude.toFixed(4)}, {destinationCoords.longitude.toFixed(4)}
-            </Text>
-          )}
-          {duration && (
-            <Text style={styles.coordinateText}>⏱️ ETA: {duration}</Text>
-          )}
-          {distance && (
-            <Text style={styles.coordinateText}>📏 Distance: {distance}</Text>
-          )}
-        </View>
+        {/* Pickup Marker */}
+        {pickupCoords && (
+          <Marker
+            coordinate={pickupCoords}
+            title="Pickup Location"
+            description={pickup}
+            pinColor="#10B981"
+          >
+            <View style={styles.customMarker}>
+              <View style={[styles.markerCircle, { backgroundColor: '#10B981' }]}>
+                <Ionicons name="location" size={20} color="#FFFFFF" />
+              </View>
+            </View>
+          </Marker>
+        )}
 
-        {/* Mock Pickup Pin */}
-        <View style={[styles.locationPin, styles.pickupPin, { top: 120, left: '20%' }]}>
-          <Ionicons name="location" size={24} color="#10B981" />
-          <View style={styles.pinLabel}>
-            <Text style={styles.pinLabelText}>Pickup</Text>
-          </View>
-        </View>
+        {/* Destination Marker */}
+        {destinationCoords && (
+          <Marker
+            coordinate={destinationCoords}
+            title="Destination"
+            description={destination}
+            pinColor="#EF4444"
+          >
+            <View style={styles.customMarker}>
+              <View style={[styles.markerCircle, { backgroundColor: '#EF4444' }]}>
+                <Ionicons name="flag" size={20} color="#FFFFFF" />
+              </View>
+            </View>
+          </Marker>
+        )}
 
-        {/* Mock Destination Pin */}
-        <View style={[styles.locationPin, styles.destinationPin, { top: 180, left: '75%' }]}>
-          <Ionicons name="flag" size={24} color="#EF4444" />
-          <View style={styles.pinLabel}>
-            <Text style={styles.pinLabelText}>Drop</Text>
-          </View>
-        </View>
+        {/* Main Route Polyline */}
+        {routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
+            strokeColor="#3B82F6"
+            strokeWidth={4}
+            lineDashPattern={[1]}
+          />
+        )}
 
-        {/* Mock Route Line */}
-        <View style={styles.routeLine} />
-
-        {/* Mock Cab Markers */}
-        {rides.map((ride, index) => (
-          <CabMarker
-            key={ride.id}
-            ride={ride}
-            position={{
-              top: 80 + (index * 40) + Math.random() * 60,
-              left: (20 + (index * 15) + Math.random() * 20) + '%',
-            }}
+        {/* Alternate Routes */}
+        {alternateRoutes.map((route, index) => (
+          <Polyline
+            key={`alternate-${index}`}
+            coordinates={route.coordinates}
+            strokeColor="#9CA3AF"
+            strokeWidth={3}
+            lineDashPattern={[5, 5]}
           />
         ))}
-      </LinearGradient>
 
-      {/* ETA Info Card */}
-      {(duration || distance) && (
-        <View style={styles.etaCard}>
-          <View style={styles.etaInfo}>
-            <Ionicons name="time" size={16} color="#3B82F6" />
-            <Text style={styles.etaText}>{duration}</Text>
-          </View>
-          <View style={styles.etaInfo}>
-            <Ionicons name="car" size={16} color="#3B82F6" />
-            <Text style={styles.etaText}>{distance}</Text>
-          </View>
+        {/* Cab Markers */}
+        {rides.slice(0, 5).map((ride, index) => {
+          const cabPosition = generateCabPosition(index, pickupCoords, destinationCoords);
+          return (
+            <Marker
+              key={ride.id}
+              coordinate={cabPosition}
+              title={`${ride.provider} - ${ride.cabType}`}
+              description={`₹${ride.fare} • ${ride.eta}m ETA`}
+              onPress={() => onRideSelect(ride)}
+            >
+              <View style={styles.cabMarkerWrapper}>
+                <View style={[styles.cabMarkerContainer, { backgroundColor: ride.color + '15' }]}>
+                  <MaterialIcons
+                    name={getCabIcon(ride.cabType) as any}
+                    size={16}
+                    color={ride.color}
+                  />
+                </View>
+                <View style={[styles.cabMarkerBadge, { backgroundColor: ride.color }]}>
+                  <Text style={styles.cabMarkerText}>₹{ride.fare}</Text>
+                </View>
+              </View>
+            </Marker>
+          );
+        })}
+      </MapView>
+
+      {/* Compact Trip Info Overlay */}
+      <View style={styles.compactTripInfo}>
+        <View style={styles.tripInfoRow}>
+          {duration && (
+            <View style={styles.tripInfoItem}>
+              <Ionicons name="time-outline" size={14} color="#3B82F6" />
+              <Text style={styles.tripInfoText}>{duration}</Text>
+            </View>
+          )}
+          {distance && (
+            <View style={styles.tripInfoItem}>
+              <Ionicons name="car-outline" size={14} color="#3B82F6" />
+              <Text style={styles.tripInfoText}>{distance}</Text>
+            </View>
+          )}
+          {showTraffic && (
+            <View style={styles.tripInfoItem}>
+              <Ionicons name="information-circle-outline" size={14} color="#3B82F6" />
+              <Text style={styles.tripInfoText}>Live Traffic</Text>
+            </View>
+          )}
         </View>
-      )}
+      </View>
 
-      {/* Location Info Card */}
-      <View style={styles.locationCard}>
-        <View style={styles.locationItem}>
-          <View style={styles.locationDot} />
-          <Text style={styles.locationText} numberOfLines={1}>
-            {pickup}
+
+
+
+
+      {/* Compact Location Card */}
+      <View style={styles.compactLocationCard}>
+        <View style={styles.locationRow}>
+          <Ionicons name="radio-button-on" size={12} color="#10B981" />
+          <Text style={styles.compactLocationText} numberOfLines={1}>
+            {pickup.length > 25 ? pickup.substring(0, 25) + '...' : pickup}
           </Text>
         </View>
-        <View style={styles.locationDivider} />
-        <View style={styles.locationItem}>
-          <View style={[styles.locationDot, styles.destinationDot]} />
-          <Text style={styles.locationText} numberOfLines={1}>
-            {destination}
+        <View style={styles.locationRow}>
+          <Ionicons name="location" size={12} color="#EF4444" />
+          <Text style={styles.compactLocationText} numberOfLines={1}>
+            {destination.length > 25 ? destination.substring(0, 25) + '...' : destination}
           </Text>
         </View>
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.actionButton}>
+      {/* Map Controls */}
+      <View style={styles.mapControls}>
+        <TouchableOpacity
+          style={[styles.controlButton, showTraffic && styles.controlButtonActive]}
+          onPress={() => setShowTraffic(!showTraffic)}
+        >
+          <Ionicons
+            name="car"
+            size={20}
+            color={showTraffic ? "#FFFFFF" : "#3B82F6"}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => {
+            if (mapRef.current) {
+              mapRef.current.animateToRegion(getMapRegion(), 1000);
+            }
+          }}
+        >
           <Ionicons name="locate" size={20} color="#3B82F6" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="add" size={20} color="#3B82F6" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="remove" size={20} color="#3B82F6" />
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => {
+            // Refresh route data
+            fetchRoute();
+          }}
+        >
+          <Ionicons name="refresh" size={20} color="#3B82F6" />
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Ride Summary */}
-      <View style={styles.rideSummary}>
-        <Text style={styles.summaryTitle}>Available Rides</Text>
-        <View style={styles.summaryStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{rides.length}</Text>
-            <Text style={styles.statLabel}>Options</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>₹{Math.min(...rides.map(r => r.fare))}</Text>
-            <Text style={styles.statLabel}>Lowest</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{Math.min(...rides.map(r => r.eta))}m</Text>
-            <Text style={styles.statLabel}>Fastest</Text>
-          </View>
+      {/* Compact Ride Summary */}
+      <View style={styles.compactRideSummary}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.compactSummaryText}>{rides.length} rides</Text>
+          <Text style={styles.compactSummaryText}>From ₹{Math.min(...rides.map(r => r.fare))}</Text>
+          <Text style={styles.compactSummaryText}>{Math.min(...rides.map(r => r.eta))}m ETA</Text>
         </View>
       </View>
     </Animated.View>
@@ -480,32 +550,35 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginLeft: 8,
   },
-  // Coordinate display styles
-  coordinateDisplay: {
+  // Compact trip info styles
+  compactTripInfo: {
     position: 'absolute',
-    top: 20,
+    top: 15,
     left: 20,
     right: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 8,
+    padding: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  coordinateTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 8,
+  tripInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
   },
-  coordinateText: {
-    fontSize: 14,
+  tripInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tripInfoText: {
+    fontSize: 12,
     color: '#374151',
-    marginBottom: 4,
-    fontFamily: 'monospace',
+    fontWeight: '500',
   },
   gridPattern: {
     position: 'absolute',
@@ -577,21 +650,23 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     borderRadius: 1,
   },
-  cabMarkerContainer: {
-    position: 'absolute',
-    zIndex: 5,
+  cabMarkerWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cabMarkerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  cabMarkerContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   cabMarkerBadge: {
     position: 'absolute',
@@ -602,6 +677,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 24,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   cabMarkerText: {
     fontSize: 8,
@@ -609,23 +689,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Inter_600SemiBold',
   },
-  locationCard: {
+  compactLocationCard: {
     position: 'absolute',
-    top: 20,
+    bottom: 80,
     left: 20,
     right: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  locationItem: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 6,
+  },
+  compactLocationText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
+    marginLeft: 8,
   },
   locationDot: {
     width: 12,
@@ -637,25 +725,19 @@ const styles = StyleSheet.create({
   destinationDot: {
     backgroundColor: '#EF4444',
   },
-  locationText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#374151',
-    fontFamily: 'Inter_400Regular',
-  },
   locationDivider: {
     height: 1,
     backgroundColor: '#E5E7EB',
     marginVertical: 12,
     marginLeft: 24,
   },
-  quickActions: {
+  mapControls: {
     position: 'absolute',
     right: 20,
     top: 120,
     alignItems: 'center',
   },
-  actionButton: {
+  controlButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -669,30 +751,32 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  rideSummary: {
+  controlButtonActive: {
+    backgroundColor: '#3B82F6',
+  },
+  compactRideSummary: {
     position: 'absolute',
     bottom: 20,
     left: 20,
     right: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 8,
+    padding: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 12,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  summaryStats: {
+  summaryRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  compactSummaryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
   },
   statItem: {
     flex: 1,
