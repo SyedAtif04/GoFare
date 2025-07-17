@@ -117,14 +117,10 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     setSuggestions([]);
 
     // Update text immediately and synchronously
-    console.log('📝 Updating text to:', suggestion.description);
     onTextChange(suggestion.description);
-    console.log('✅ Text update called');
 
     // Call location selection handler immediately
-    console.log('📍 Calling location selection handler...');
     onLocationSelect(suggestion);
-    console.log('✅ Location selection handler called');
 
     // Dismiss keyboard
     Keyboard.dismiss();
@@ -155,13 +151,13 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     setIsFocused(false);
     onBlur?.();
 
-    // Hide suggestions after a much longer delay to allow for suggestion selection
+    // Hide suggestions after a delay to allow for suggestion selection
     setTimeout(() => {
       if (!isProcessingSelection.current) {
         setShowSuggestions(false);
         suggestionHeight.value = withTiming(0, { duration: 200 });
       }
-    }, 1000);
+    }, 300);
   };
 
   // Cleanup timer on unmount
@@ -212,46 +208,26 @@ const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
             nestedScrollEnabled={true}
           >
             {suggestions.map((item) => (
-              <View key={item.place_id} style={styles.suggestionItem}>
-                {/* Test button to verify touch works */}
-                <TouchableOpacity
-                  style={{
-                    position: 'absolute',
-                    right: 5,
-                    top: 5,
-                    backgroundColor: '#3B82F6',
-                    padding: 5,
-                    borderRadius: 3,
-                    zIndex: 10001
-                  }}
-                  onPress={() => {
-                    console.log('🔥 TEST BUTTON PRESSED for:', item.main_text);
-                    handleSuggestionPress(item);
-                  }}
-                >
-                  <Text style={{ color: 'white', fontSize: 10 }}>SELECT</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}
-                  onPress={() => {
-                    console.log('🔥 Main TouchableOpacity onPress triggered for:', item.main_text);
-                    handleSuggestionPress(item);
-                  }}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                >
-                  <Ionicons name="location-outline" size={16} color="#6B7280" style={styles.suggestionIcon} />
-                  <View style={styles.suggestionText} pointerEvents="none">
-                    <Text style={styles.suggestionMainText} numberOfLines={1}>
-                      {item.main_text}
-                    </Text>
-                    <Text style={styles.suggestionSecondaryText} numberOfLines={1}>
-                      {item.secondary_text}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                key={item.place_id}
+                style={styles.suggestionItem}
+                onPress={() => {
+                  console.log('🎯 Suggestion selected:', item.main_text);
+                  handleSuggestionPress(item);
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="location-outline" size={16} color="#6B7280" style={styles.suggestionIcon} />
+                <View style={styles.suggestionText} pointerEvents="none">
+                  <Text style={styles.suggestionMainText} numberOfLines={1}>
+                    {item.main_text}
+                  </Text>
+                  <Text style={styles.suggestionSecondaryText} numberOfLines={1}>
+                    {item.secondary_text}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )}
