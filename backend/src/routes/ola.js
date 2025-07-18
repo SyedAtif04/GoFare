@@ -69,23 +69,65 @@ router.get('/estimate', (req, res) => {
     const serviceTax = (fareAfterSurge * serviceTaxPercent) / 100;
     const totalFare = fareAfterSurge + serviceTax;
 
-    // Generate random ETA between 4-7 minutes
-    const eta = Math.floor(Math.random() * 4) + 4;
-    const duration = Math.floor(Math.random() * 8) + 16; // 16-24 mins
+    // Ola cab types with different pricing
+    const olaOptions = [
+      {
+        cabType: 'Mini',
+        cabIcon: 'directions-car',
+        multiplier: 0.8,
+        baseEta: 4,
+        rating: 4.4
+      },
+      {
+        cabType: 'Sedan',
+        cabIcon: 'car-sport',
+        multiplier: 1.0,
+        baseEta: 5,
+        rating: 4.6
+      },
+      {
+        cabType: 'Auto',
+        cabIcon: 'local-taxi',
+        multiplier: 0.6,
+        baseEta: 3,
+        rating: 4.2
+      },
+      {
+        cabType: 'SUV',
+        cabIcon: 'airport-shuttle',
+        multiplier: 1.5,
+        baseEta: 7,
+        rating: 4.7
+      }
+    ];
 
-    // Return response in frontend-compatible format
+    // Generate estimates for all cab types
+    const estimates = olaOptions.map((option, index) => {
+      const adjustedFare = Math.round(totalFare * option.multiplier);
+      const eta = option.baseEta + Math.floor(Math.random() * 3);
+      const duration = Math.floor(Math.random() * 8) + 16;
+
+      return {
+        id: `ola_${option.cabType.toLowerCase()}_${Date.now()}_${index}`,
+        provider: 'Ola',
+        providerLogo: 'car-sport',
+        cabType: option.cabType,
+        cabIcon: option.cabIcon,
+        fare: adjustedFare,
+        eta: eta,
+        duration: duration,
+        surge: Math.random() > 0.7, // 30% chance of surge
+        surgeMultiplier: Math.random() > 0.7 ? 1.2 + Math.random() * 0.5 : 1.0,
+        rating: option.rating,
+        color: '#FFD700'
+      };
+    });
+
+    // Return array of estimates
     res.json({
-      id: 'ola_' + Date.now(),
+      success: true,
       provider: 'Ola',
-      providerLogo: 'car-sport',
-      cabType: 'Sedan',
-      cabIcon: 'car-sport',
-      fare: Math.round(totalFare),
-      eta: eta,
-      duration: duration,
-      surge: false,
-      rating: 4.6,
-      color: '#FFD700'
+      estimates: estimates
     });
 
   } catch (error) {

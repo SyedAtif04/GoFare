@@ -9,6 +9,9 @@ require('dotenv').config();
 const mapsRoutes = require('./src/routes/maps');
 const locationRoutes = require('./src/routes/location');
 const geocodingRoutes = require('./src/routes/geocoding');
+const rapidoRoutes = require('./src/routes/rapido');
+const olaRoutes = require('./src/routes/ola');
+const uberRoutes = require('./src/routes/uber');
 
 // Import middleware
 const errorHandler = require('./src/middleware/errorHandler');
@@ -26,12 +29,12 @@ app.use(cors({
     'http://localhost:8081',           // Expo Metro bundler (web)
     'http://localhost:8082',           // Alternative port
     'http://localhost:19006',          // Expo web
-    'http://10.50.179.45:8081',       // Computer IP with Expo
-    'http://10.50.179.45:8082',       // Computer IP alternative
-    'http://10.50.179.45:19006',      // Computer IP web
-    'http://10.50.179.240:8081',      // Mobile IP with Expo
-    'http://10.50.179.240:8082',      // Mobile IP alternative
-    'http://10.50.179.240:19006',     // Mobile IP web
+    'http://172.16.222.136:8081',       // Laptop IP with Expo
+    'http://172.16.222.136:8082',       // Laptop IP alternative
+    'http://172.16.222.136:19006',      // Laptop IP web
+    'http://172.16.222.108:8081',       // Mobile IP with Expo
+    'http://172.16.222.108:8082',       // Mobile IP alternative
+    'http://172.16.222.108:19006',      // Mobile IP web
     '*'                                // Allow all for development
   ],
   credentials: false,
@@ -86,6 +89,11 @@ app.use(`/api/${apiVersion}/maps`, mapsRoutes);
 app.use(`/api/${apiVersion}/location`, locationRoutes);
 app.use(`/api/${apiVersion}/geocoding`, geocodingRoutes);
 
+// Provider routes (for ride estimates)
+app.use('/api/rapido', rapidoRoutes);
+app.use('/api/ola', olaRoutes);
+app.use('/api/uber', uberRoutes);
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -96,7 +104,10 @@ app.use('*', (req, res) => {
       `GET /api/${apiVersion}/maps/autocomplete`,
       `POST /api/${apiVersion}/location/current`,
       `POST /api/${apiVersion}/geocoding/coordinates`,
-      `POST /api/${apiVersion}/geocoding/reverse`
+      `POST /api/${apiVersion}/geocoding/reverse`,
+      `GET /api/rapido/estimate`,
+      `GET /api/ola/estimate`,
+      `GET /api/uber/estimate`
     ]
   });
 });
@@ -106,13 +117,14 @@ app.use(errorHandler);
 
 // Start server on all interfaces (0.0.0.0) to accept mobile connections
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(` GoFare Backend API running on port ${PORT}`);
-  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(` Google Maps API: ${process.env.GOOGLE_MAPS_API_KEY ? 'Configured' : 'Missing'}`);
-  console.log(` Local access: http://localhost:${PORT}/health`);
-  console.log(` Computer access: http://10.50.179.45:${PORT}/health`);
-  console.log(` Mobile access: http://10.50.179.240:${PORT}/health`);
-  console.log(` API endpoint: http://10.50.179.45:${PORT}/api/v1/maps/autocomplete`);
+  console.log(`🚀 GoFare Backend API running on port ${PORT}`);
+  console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🗺️ Google Maps API: ${process.env.GOOGLE_MAPS_API_KEY ? 'Configured' : 'Missing'}`);
+  console.log(`💻 Local access: http://localhost:${PORT}/health`);
+  console.log(`🖥️ Laptop access: http://180.168.1.11:${PORT}/health`);
+  console.log(`📱 Mobile access: http://180.168.1.24:${PORT}/health`);
+  console.log(`🔗 API endpoint: http://180.168.1.11:${PORT}/api/v1/maps/autocomplete`);
+  console.log(`🚗 Ride estimates: http://180.168.1.11:${PORT}/api/ola/estimate`);
 });
 
 module.exports = app;

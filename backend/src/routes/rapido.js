@@ -45,20 +45,52 @@ router.get('/estimate', (req, res) => {
     // Calculate distance
     const distance = calculateDistance(pickupLat, pickupLng, dropLat, dropLng);
 
-    // Calculate fare: ₹10 base + ₹10/km
-    const baseFare = 10;
-    const perKmRate = 10;
-    const estimatedPrice = Math.round(baseFare + (distance * perKmRate));
+    // Rapido cab types with different pricing
+    const rapidoOptions = [
+      {
+        cabType: 'Bike',
+        cabIcon: 'two-wheeler',
+        baseFare: 10,
+        perKmRate: 10,
+        baseEta: 2,
+        rating: 4.5
+      },
+      {
+        cabType: 'Auto',
+        cabIcon: 'local-taxi',
+        baseFare: 20,
+        perKmRate: 12,
+        baseEta: 4,
+        rating: 4.3
+      }
+    ];
 
-    // Generate random ETA between 2-6 minutes
-    const eta = Math.floor(Math.random() * 5) + 2; // 2-6 minutes
+    // Generate estimates for all cab types
+    const estimates = rapidoOptions.map((option, index) => {
+      const fare = Math.round(option.baseFare + (distance * option.perKmRate));
+      const eta = option.baseEta + Math.floor(Math.random() * 3);
+      const duration = Math.floor(Math.random() * 5) + 12; // 12-17 mins
 
-    // Return response
+      return {
+        id: `rapido_${option.cabType.toLowerCase()}_${Date.now()}_${index}`,
+        provider: 'Rapido',
+        providerLogo: 'bicycle',
+        cabType: option.cabType,
+        cabIcon: option.cabIcon,
+        fare: fare,
+        eta: eta,
+        duration: duration,
+        surge: false, // Rapido rarely has surge
+        rating: option.rating,
+        color: '#FF6B35'
+      };
+    });
+
+    // Return array of estimates
     res.json({
-      service: 'Rapido',
-      estimated_price: estimatedPrice,
-      eta: `${eta} mins`,
-      distance: `${distance.toFixed(2)} km`
+      success: true,
+      provider: 'Rapido',
+      estimates: estimates
     });
 
   } catch (error) {

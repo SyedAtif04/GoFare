@@ -1,8 +1,8 @@
 // API service for GoFare backend integration
 
-// Backend URL - Force IP address for all platforms during testing
-const BACKEND_URL = 'http://10.50.179.45:3000';
-console.log('🚀 Backend URL (forced IP):', BACKEND_URL);
+// Backend URL - Updated to new laptop IP address
+const BACKEND_URL = 'http://172.16.222.136:3000';
+console.log('🚀 Backend URL (updated IP):', BACKEND_URL);
 
 export interface LocationSuggestion {
   place_id: string;
@@ -249,6 +249,92 @@ class ApiService {
       console.error('Health check failed:', error);
       return false;
     }
+  }
+
+  // Get ride estimates from all providers
+  async getAllRideEstimates(pickupLat: number, pickupLng: number, dropLat: number, dropLng: number): Promise<any[]> {
+    try {
+      console.log('🚗 Fetching ride estimates from all providers...');
+
+      // Call all three provider APIs simultaneously
+      const [rapidoResponse, olaResponse, uberResponse] = await Promise.allSettled([
+        this.getRapidoEstimate(pickupLat, pickupLng, dropLat, dropLng),
+        this.getOlaEstimate(pickupLat, pickupLng, dropLat, dropLng),
+        this.getUberEstimate(pickupLat, pickupLng, dropLat, dropLng)
+      ]);
+
+      const allEstimates: any[] = [];
+
+      // Process Rapido response
+      if (rapidoResponse.status === 'fulfilled' && rapidoResponse.value.success) {
+        allEstimates.push(...rapidoResponse.value.estimates);
+        console.log('✅ Rapido estimates:', rapidoResponse.value.estimates.length);
+      } else {
+        console.log('❌ Rapido failed:', rapidoResponse.status === 'rejected' ? rapidoResponse.reason : 'No estimates');
+      }
+
+      // Process Ola response
+      if (olaResponse.status === 'fulfilled' && olaResponse.value.success) {
+        allEstimates.push(...olaResponse.value.estimates);
+        console.log('✅ Ola estimates:', olaResponse.value.estimates.length);
+      } else {
+        console.log('❌ Ola failed:', olaResponse.status === 'rejected' ? olaResponse.reason : 'No estimates');
+      }
+
+      // Process Uber response
+      if (uberResponse.status === 'fulfilled' && uberResponse.value.success) {
+        allEstimates.push(...uberResponse.value.estimates);
+        console.log('✅ Uber estimates:', uberResponse.value.estimates.length);
+      } else {
+        console.log('❌ Uber failed:', uberResponse.status === 'rejected' ? uberResponse.reason : 'No estimates');
+      }
+
+      console.log('🎯 Total estimates collected:', allEstimates.length);
+      return allEstimates;
+
+    } catch (error) {
+      console.error('Error fetching ride estimates:', error);
+      throw error;
+    }
+  }
+
+  // Get Rapido estimates
+  private async getRapidoEstimate(pickupLat: number, pickupLng: number, dropLat: number, dropLng: number): Promise<any> {
+    const response = await fetch(
+      `${this.baseUrl}/api/rapido/estimate?pickup_lat=${pickupLat}&pickup_lng=${pickupLng}&drop_lat=${dropLat}&drop_lng=${dropLng}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Rapido API error: ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  // Get Ola estimates
+  private async getOlaEstimate(pickupLat: number, pickupLng: number, dropLat: number, dropLng: number): Promise<any> {
+    const response = await fetch(
+      `${this.baseUrl}/api/ola/estimate?pickup_lat=${pickupLat}&pickup_lng=${pickupLng}&drop_lat=${dropLat}&drop_lng=${dropLng}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Ola API error: ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  // Get Uber estimates
+  private async getUberEstimate(pickupLat: number, pickupLng: number, dropLat: number, dropLng: number): Promise<any> {
+    const response = await fetch(
+      `${this.baseUrl}/api/uber/estimate?pickup_lat=${pickupLat}&pickup_lng=${pickupLng}&drop_lat=${dropLat}&drop_lng=${dropLng}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Uber API error: ${response.status}`);
+    }
+
+    return await response.json();
   }
 }
 

@@ -94,26 +94,63 @@ router.get('/estimate', async (req, res) => {
     const userToken = uberService.getUserToken();
 
     if (!userToken) {
-      // Return fallback estimate with login prompt
-      const fallbackFare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
+      // Return fallback estimates for multiple cab types
+      const uberOptions = [
+        {
+          cabType: 'UberGo',
+          cabIcon: 'directions-car',
+          multiplier: 0.85,
+          baseEta: 4,
+          rating: 4.6
+        },
+        {
+          cabType: 'UberX',
+          cabIcon: 'car',
+          multiplier: 1.0,
+          baseEta: 5,
+          rating: 4.8
+        },
+        {
+          cabType: 'UberXL',
+          cabIcon: 'airport-shuttle',
+          multiplier: 1.6,
+          baseEta: 7,
+          rating: 4.9
+        }
+      ];
+
+      const baseFallbackFare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
+
+      const estimates = uberOptions.map((option, index) => {
+        const fare = Math.round(baseFallbackFare * option.multiplier);
+        const eta = option.baseEta + Math.floor(Math.random() * 4);
+        const duration = Math.floor(Math.random() * 10) + 15;
+
+        return {
+          id: `uber_${option.cabType.toLowerCase()}_fallback_${Date.now()}_${index}`,
+          provider: 'Uber',
+          providerLogo: 'car',
+          cabType: option.cabType,
+          cabIcon: option.cabIcon,
+          fare: fare,
+          eta: eta,
+          duration: duration,
+          surge: Math.random() > 0.8, // 20% chance of surge
+          surgeMultiplier: Math.random() > 0.8 ? 1.2 + Math.random() * 0.6 : 1.0,
+          rating: option.rating,
+          color: '#000000',
+          source: 'approximate',
+          requiresLogin: true,
+          loginUrl: '/api/uber/login',
+          message: 'Login for real-time prices'
+        };
+      });
 
       return res.json({
-        id: 'uber_fallback_' + Date.now(),
+        success: true,
         provider: 'Uber',
-        providerLogo: 'car',
-        cabType: 'UberX',
-        cabIcon: 'car',
-        fare: fallbackFare,
-        eta: Math.floor(Math.random() * 6) + 3,
-        duration: Math.floor(Math.random() * 10) + 15,
-        surge: false,
-        surgeMultiplier: 1.0,
-        rating: 4.8,
-        color: '#000000',
-        source: 'approximate',
-        requiresLogin: true,
-        loginUrl: '/api/uber/login',
-        message: 'Login for real-time prices'
+        estimates: estimates,
+        requiresLogin: true
       });
     }
 
@@ -142,7 +179,6 @@ router.get('/estimate', async (req, res) => {
       }
 
       let fare = 0;
-      let cabType = 'UberX';
       let duration = 20;
       let surge = false;
       let surgeMultiplier = 1.0;
@@ -159,7 +195,6 @@ router.get('/estimate', async (req, res) => {
           }
         }
 
-        cabType = estimate.display_name || 'UberX';
         duration = estimate.duration ? Math.round(estimate.duration / 60) : 20;
         surge = estimate.surge_multiplier > 1;
         surgeMultiplier = estimate.surge_multiplier || 1.0;
@@ -169,44 +204,110 @@ router.get('/estimate', async (req, res) => {
         fare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
       }
 
-      // Return response in frontend-compatible format
-      res.json({
-        id: 'uber_' + Date.now(),
-        provider: 'Uber',
-        providerLogo: 'car',
-        cabType: cabType,
-        cabIcon: 'car',
-        fare: fare || 150,
-        eta: eta,
-        duration: duration,
-        surge: surge,
-        surgeMultiplier: surgeMultiplier,
-        rating: 4.8,
-        color: '#000000',
-        source: estimate ? 'api' : 'fallback',
-        authenticated: true
-      });
+      // If we have real API data, try to extract multiple cab types
+      if (priceData.status === 'fulfilled' && priceData.value.prices?.length > 0) {
+        const estimates = priceData.value.prices.map((priceEstimate, index) => {
+          let fare = 150; // default
+          if (priceEstimate.estimate) {
+            const fareMatch = priceEstimate.estimate.match(/[\d.]+/);
+            if (fareMatch) {
+              fare = parseFloat(fareMatch[0]);
+              if (priceEstimate.estimate.includes('$')) {
+                fare = Math.round(fare * 83); // USD to INR conversion
+              }
+            }
+          }
+
+          return {
+            id: `uber_${priceEstimate.display_name?.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`,
+            provider: 'Uber',
+            providerLogo: 'car',
+            cabType: priceEstimate.display_name || 'UberX',
+            cabIcon: 'car',
+            fare: fare,
+            eta: eta,
+            duration: priceEstimate.duration ? Math.round(priceEstimate.duration / 60) : 20,
+            surge: priceEstimate.surge_multiplier > 1,
+            surgeMultiplier: priceEstimate.surge_multiplier || 1.0,
+            rating: 4.8,
+            color: '#000000',
+            source: 'api',
+            authenticated: true
+          };
+        });
+
+        return res.json({
+          success: true,
+          provider: 'Uber',
+          estimates: estimates,
+          authenticated: true
+        });
+      } else {
+        // Fallback to multiple cab types with calculated fares
+        const uberOptions = [
+          { cabType: 'UberGo', multiplier: 0.85, rating: 4.6 },
+          { cabType: 'UberX', multiplier: 1.0, rating: 4.8 },
+          { cabType: 'UberXL', multiplier: 1.6, rating: 4.9 }
+        ];
+
+        const estimates = uberOptions.map((option, index) => ({
+          id: `uber_${option.cabType.toLowerCase()}_${Date.now()}_${index}`,
+          provider: 'Uber',
+          providerLogo: 'car',
+          cabType: option.cabType,
+          cabIcon: 'car',
+          fare: Math.round((fare || 150) * option.multiplier),
+          eta: eta,
+          duration: duration,
+          surge: surge,
+          surgeMultiplier: surgeMultiplier,
+          rating: option.rating,
+          color: '#000000',
+          source: 'fallback',
+          authenticated: true
+        }));
+
+        return res.json({
+          success: true,
+          provider: 'Uber',
+          estimates: estimates,
+          authenticated: true
+        });
+      }
 
     } catch (apiError) {
       console.error('Uber API integration failed:', apiError.message);
 
-      // Fallback to calculation
-      const fallbackFare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
+      // Fallback to calculation with multiple cab types
+      const baseFallbackFare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
 
-      res.json({
-        id: 'uber_fallback_' + Date.now(),
+      const uberOptions = [
+        { cabType: 'UberGo', multiplier: 0.85, rating: 4.6 },
+        { cabType: 'UberX', multiplier: 1.0, rating: 4.8 },
+        { cabType: 'UberXL', multiplier: 1.6, rating: 4.9 }
+      ];
+
+      const estimates = uberOptions.map((option, index) => ({
+        id: `uber_${option.cabType.toLowerCase()}_error_${Date.now()}_${index}`,
         provider: 'Uber',
         providerLogo: 'car',
-        cabType: 'UberX',
+        cabType: option.cabType,
         cabIcon: 'car',
-        fare: fallbackFare,
+        fare: Math.round(baseFallbackFare * option.multiplier),
         eta: Math.floor(Math.random() * 6) + 3,
         duration: Math.floor(Math.random() * 10) + 15,
         surge: false,
         surgeMultiplier: 1.0,
-        rating: 4.8,
+        rating: option.rating,
         color: '#000000',
         source: 'fallback',
+        error: 'API unavailable'
+      }));
+
+      res.json({
+        success: true,
+        provider: 'Uber',
+        estimates: estimates,
         error: 'API unavailable'
       });
     }

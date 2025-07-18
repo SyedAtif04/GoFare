@@ -18,6 +18,7 @@ import {
 import FilterSheet from '../components/FilterSheet';
 import LoadingState from '../components/LoadingState';
 import MapView from '../components/MapView';
+import { apiService } from '../services/apiService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -175,37 +176,74 @@ const ResultsScreen: React.FC = () => {
   ];
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      // Always load ALL mock data - filtering will be done in getSortedRides
-      setRideOptions(mockRideData);
-      setIsLoading(false);
+    const fetchRideEstimates = async () => {
+      try {
+        // Check if we have coordinates
+        if (!pickupLat || !pickupLng || !destLat || !destLng) {
+          console.log('❌ Missing coordinates for ride estimates');
+          // Fallback to mock data
+          setRideOptions(mockRideData);
+          setIsLoading(false);
+          return;
+        }
 
-      // Start animations
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]).start();
+        console.log('🚗 Fetching real ride estimates...');
+        console.log('📍 Pickup:', pickupLat, pickupLng);
+        console.log('🏁 Destination:', destLat, destLng);
 
-      // Stagger card animations
-      cardAnimations.forEach((anim, index) => {
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 300,
-          delay: index * 100,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, 2000);
-  }, []);
+        // Get real estimates from all providers
+        const estimates = await apiService.getAllRideEstimates(
+          parseFloat(pickupLat),
+          parseFloat(pickupLng),
+          parseFloat(destLat),
+          parseFloat(destLng)
+        );
+
+        console.log('✅ Received estimates:', estimates.length);
+
+        if (estimates.length > 0) {
+          setRideOptions(estimates);
+        } else {
+          console.log('⚠️ No estimates received, using mock data');
+          setRideOptions(mockRideData);
+        }
+
+      } catch (error) {
+        console.error('❌ Error fetching ride estimates:', error);
+        // Fallback to mock data on error
+        setRideOptions(mockRideData);
+      } finally {
+        setIsLoading(false);
+
+        // Start animations
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        // Stagger card animations
+        cardAnimations.forEach((anim, index) => {
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 300,
+            delay: index * 100,
+            useNativeDriver: true,
+          }).start();
+        });
+      }
+    };
+
+    // Add delay for better UX
+    setTimeout(fetchRideEstimates, 1500);
+  }, [pickupLat, pickupLng, destLat, destLng]);
 
   const getSortedRides = () => {
     let filtered = rideOptions.filter(ride => {
