@@ -29,12 +29,15 @@ app.use(cors({
     'http://localhost:8081',           // Expo Metro bundler (web)
     'http://localhost:8082',           // Alternative port
     'http://localhost:19006',          // Expo web
-    'http://172.16.222.136:8081',       // Laptop IP with Expo
-    'http://172.16.222.136:8082',       // Laptop IP alternative
-    'http://172.16.222.136:19006',      // Laptop IP web
-    'http://172.16.222.108:8081',       // Mobile IP with Expo
-    'http://172.16.222.108:8082',       // Mobile IP alternative
-    'http://172.16.222.108:19006',      // Mobile IP web
+    'http://10.205.72.101:8081',       // Current IP with Expo
+    'http://10.205.72.101:8082',       // Current IP alternative
+    'http://10.205.72.101:19006',      // Current IP web
+    'http://192.168.0.107:8081',       // Laptop IP with Expo
+    'http://192.168.0.107:8082',       // Laptop IP alternative
+    'http://192.168.0.107:19006',      // Laptop IP web
+    'http://192.168.0.102:8081',       // Mobile IP with Expo
+    'http://192.168.0.102:8082',       // Mobile IP alternative
+    'http://192.168.0.102:19006',      // Mobile IP web
     '*'                                // Allow all for development
   ],
   credentials: false,

@@ -1,8 +1,8 @@
 // API service for GoFare backend integration
 
-// Backend URL - Updated to new laptop IP address
-const BACKEND_URL = 'http://172.16.222.136:3000';
-console.log('🚀 Backend URL (updated IP):', BACKEND_URL);
+// Backend URL - Updated to current IP address
+const BACKEND_URL = 'http://10.205.72.101:3000';
+console.log('🚀 Backend URL (current IP):', BACKEND_URL);
 
 export interface LocationSuggestion {
   place_id: string;
