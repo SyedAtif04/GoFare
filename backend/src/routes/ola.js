@@ -1,24 +1,59 @@
 const express = require('express');
 const router = express.Router();
+const mapsService = require('../services/mapsService');
 
-// Helper function to calculate distance between two coordinates using Haversine formula
-function calculateDistance(lat1, lng1, lat2, lng2) {
+// Helper function to get road distance using Google Maps Distance Matrix API
+async function getRoadDistance(lat1, lng1, lat2, lng2, apiKey) {
+  try {
+    const origins = [`${lat1},${lng1}`];
+    const destinations = [`${lat2},${lng2}`];
+
+    const distanceMatrix = await mapsService.getDistanceMatrix({
+      origins,
+      destinations,
+      mode: 'driving',
+      units: 'metric',
+      apiKey
+    });
+
+    if (distanceMatrix.rows && distanceMatrix.rows[0] && distanceMatrix.rows[0].elements[0]) {
+      const element = distanceMatrix.rows[0].elements[0];
+      if (element.status === 'OK' && element.distance) {
+        // Convert meters to kilometers
+        const distanceKm = element.distance.value / 1000;
+        console.log(` Road distance: ${distanceKm.toFixed(2)} km (vs straight-line)`);
+        return distanceKm;
+      }
+    }
+
+    // Fallback to Haversine if Google Maps fails
+    console.log(' Google Maps distance failed, using straight-line distance');
+    return calculateStraightLineDistance(lat1, lng1, lat2, lng2);
+  } catch (error) {
+    console.error(' Error getting road distance:', error.message);
+    // Fallback to Haversine if Google Maps fails
+    return calculateStraightLineDistance(lat1, lng1, lat2, lng2);
+  }
+}
+
+// Helper function to calculate straight-line distance (fallback)
+function calculateStraightLineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371; // Earth's radius in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
-  
+
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c;
-  
+
   return distance;
 }
 
 // Ola fare estimation route
-router.get('/estimate', (req, res) => {
+router.get('/estimate', async (req, res) => {
   try {
     const { pickup_lat, pickup_lng, drop_lat, drop_lng, ride_time } = req.query;
 
@@ -50,8 +85,8 @@ router.get('/estimate', (req, res) => {
       });
     }
 
-    // Calculate distance using Haversine formula
-    const distanceKm = calculateDistance(pickupLat, pickupLng, dropLat, dropLng);
+    // Get road distance using Google Maps
+    const distanceKm = await getRoadDistance(pickupLat, pickupLng, dropLat, dropLng, process.env.GOOGLE_MAPS_API_KEY);
 
     // Ola pricing logic
     const baseFare = 45;

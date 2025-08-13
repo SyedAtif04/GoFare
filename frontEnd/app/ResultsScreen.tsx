@@ -18,6 +18,7 @@ import {
 import FilterSheet from '../components/FilterSheet';
 import LoadingState from '../components/LoadingState';
 import MapView from '../components/MapView';
+import WeatherRideSuggestion from '../components/WeatherRideSuggestion';
 import { apiService } from '../services/apiService';
 
 const { width, height } = Dimensions.get('window');
@@ -75,6 +76,7 @@ const ResultsScreen: React.FC = () => {
   const [rideOptions, setRideOptions] = useState<RideOption[]>([]);
   const [sortBy, setSortBy] = useState<'fare' | 'eta'>('fare');
   const [showFilters, setShowFilters] = useState(false);
+  const [showWeatherModal, setShowWeatherModal] = useState(false);
   // Initialize filters based on home screen selection
   const getInitialFilters = () => {
     if (selectedCabType && typeof selectedCabType === 'string' && selectedCabType !== 'all') {
@@ -329,10 +331,15 @@ const ResultsScreen: React.FC = () => {
             {pickup} → {destination}
           </Text>
         </View>
-        
-        <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.filterButton}>
-          <Ionicons name="options" size={24} color="#3B82F6" />
-        </TouchableOpacity>
+
+        <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={() => setShowWeatherModal(true)} style={styles.weatherButton}>
+            <Ionicons name="partly-sunny" size={24} color="#10B981" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.filterButton}>
+            <Ionicons name="options" size={24} color="#3B82F6" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* View Toggle */}
@@ -522,6 +529,14 @@ const ResultsScreen: React.FC = () => {
           onFiltersChange={setFilters}
         />
       )}
+
+      {/* Weather Modal */}
+      <WeatherRideSuggestion
+        visible={showWeatherModal}
+        onClose={() => setShowWeatherModal(false)}
+        pickup={pickupCoords ? { lat: pickupCoords.latitude, lon: pickupCoords.longitude } : { lat: 28.6139, lon: 77.2090 }}
+        drop={destinationCoords ? { lat: destinationCoords.latitude, lon: destinationCoords.longitude } : { lat: 28.5355, lon: 77.3910 }}
+      />
     </View>
   );
 };
@@ -574,6 +589,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 2,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  weatherButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterButton: {
     width: 40,

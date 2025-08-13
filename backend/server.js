@@ -12,6 +12,7 @@ const geocodingRoutes = require('./src/routes/geocoding');
 const rapidoRoutes = require('./src/routes/rapido');
 const olaRoutes = require('./src/routes/ola');
 const uberRoutes = require('./src/routes/uber');
+const weatherRoutes = require('./src/services/weather');
 
 // Import middleware
 const errorHandler = require('./src/middleware/errorHandler');
@@ -97,6 +98,9 @@ app.use('/api/rapido', rapidoRoutes);
 app.use('/api/ola', olaRoutes);
 app.use('/api/uber', uberRoutes);
 
+// Weather routes
+app.use('/api', weatherRoutes);
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -110,7 +114,8 @@ app.use('*', (req, res) => {
       `POST /api/${apiVersion}/geocoding/reverse`,
       `GET /api/rapido/estimate`,
       `GET /api/ola/estimate`,
-      `GET /api/uber/estimate`
+      `GET /api/uber/estimate`,
+      `POST /api/weather-ride-suggestion`
     ]
   });
 });

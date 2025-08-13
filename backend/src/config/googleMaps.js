@@ -49,7 +49,7 @@ const validateApiKey = () => {
     throw new Error('Please set a valid GOOGLE_MAPS_API_KEY in your .env file');
   }
   
-  console.log('✅ Google Maps API key configured');
+  console.log(' Google Maps API key configured');
 };
 
 // Error handling for Google Maps API responses

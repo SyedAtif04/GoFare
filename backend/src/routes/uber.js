@@ -119,7 +119,7 @@ router.get('/estimate', async (req, res) => {
         }
       ];
 
-      const baseFallbackFare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
+      const baseFallbackFare = await uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng, process.env.GOOGLE_MAPS_API_KEY);
 
       const estimates = uberOptions.map((option, index) => {
         const fare = Math.round(baseFallbackFare * option.multiplier);
@@ -201,7 +201,7 @@ router.get('/estimate', async (req, res) => {
       } else {
         // Fallback calculation
         console.log('Using fallback fare calculation');
-        fare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
+        fare = await uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng, process.env.GOOGLE_MAPS_API_KEY);
       }
 
       // If we have real API data, try to extract multiple cab types
@@ -279,7 +279,7 @@ router.get('/estimate', async (req, res) => {
       console.error('Uber API integration failed:', apiError.message);
 
       // Fallback to calculation with multiple cab types
-      const baseFallbackFare = uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng);
+      const baseFallbackFare = await uberService.calculateFallbackFare(pickupLat, pickupLng, dropLat, dropLng, process.env.GOOGLE_MAPS_API_KEY);
 
       const uberOptions = [
         { cabType: 'UberGo', multiplier: 0.85, rating: 4.6 },

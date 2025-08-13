@@ -119,18 +119,49 @@ const getTimeEstimate = async (startLat, startLng) => {
 /**
  * Calculate fallback fare when API is unavailable
  */
-const calculateFallbackFare = (pickupLat, pickupLng, dropLat, dropLng) => {
-  // Calculate distance using Haversine formula
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (dropLat - pickupLat) * Math.PI / 180;
-  const dLng = (dropLng - pickupLng) * Math.PI / 180;
-  
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(pickupLat * Math.PI / 180) * Math.cos(dropLat * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c;
+const calculateFallbackFare = async (pickupLat, pickupLng, dropLat, dropLng, apiKey) => {
+  let distance;
+
+  try {
+    // Try to get road distance from Google Maps
+    const mapsService = require('./mapsService');
+    const origins = [`${pickupLat},${pickupLng}`];
+    const destinations = [`${dropLat},${dropLng}`];
+
+    const distanceMatrix = await mapsService.getDistanceMatrix({
+      origins,
+      destinations,
+      mode: 'driving',
+      units: 'metric',
+      apiKey
+    });
+
+    if (distanceMatrix.rows && distanceMatrix.rows[0] && distanceMatrix.rows[0].elements[0]) {
+      const element = distanceMatrix.rows[0].elements[0];
+      if (element.status === 'OK' && element.distance) {
+        // Convert meters to kilometers
+        distance = element.distance.value / 1000;
+        console.log(` Uber fallback using road distance: ${distance.toFixed(2)} km`);
+      }
+    }
+  } catch (error) {
+    console.error(' Error getting road distance for Uber fallback:', error.message);
+  }
+
+  // Fallback to Haversine if Google Maps fails
+  if (!distance) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (dropLat - pickupLat) * Math.PI / 180;
+    const dLng = (dropLng - pickupLng) * Math.PI / 180;
+
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(pickupLat * Math.PI / 180) * Math.cos(dropLat * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    distance = R * c;
+    console.log(` Uber fallback using straight-line distance: ${distance.toFixed(2)} km`);
+  }
 
   // Uber-like pricing calculation
   const baseFare = 50;
@@ -138,9 +169,9 @@ const calculateFallbackFare = (pickupLat, pickupLng, dropLat, dropLng) => {
   const timeCharge = 2; // per minute
   const bookingFee = 25;
   const estimatedTime = distance * 3; // rough estimate: 3 mins per km
-  
+
   const totalFare = baseFare + (distance * perKmRate) + (estimatedTime * timeCharge) + bookingFee;
-  
+
   return Math.round(totalFare);
 };
 
